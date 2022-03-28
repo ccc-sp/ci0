@@ -1,6 +1,40 @@
-#include "common.h"
+#ifndef NO_INCLUDE
+#include <stdio.h>
+#include <stdlib.h>
+#include <memory.h>
+#include <unistd.h>
+#include <fcntl.h>
+#endif
 
-int codeLen, dataLen;
+int *code,   // 機器碼
+    *stack,  // 堆疊段
+    *entry,  // 進入點
+    codeLen, // 程式段長度
+    dataLen, // 資料段長度
+    poolsz;  // 分配空間大小
+int src,     // print source and assembly flag (印出原始碼)
+    debug;   // print executed instructions (印出執行指令 -- 除錯模式)
+char *data,  // 資料段 
+     *op;    // 虛擬機指令列表
+
+// opcodes (機器碼的 op 代號)
+enum { LEA ,IMM ,ADDR,JMP ,JSR ,BZ  ,BNZ ,ENT ,ADJ ,LEV ,LI  ,LC  ,SI  ,SC  ,PSH ,
+       OR  ,XOR ,AND ,EQ  ,NE  ,LT  ,GT  ,LE  ,GE  ,SHL ,SHR ,ADD ,SUB ,MUL ,DIV ,MOD ,
+       OPEN,READ,WRIT,CLOS,PRTF,MALC,FREE,MSET,MCMP,EXIT };
+
+int init() {
+  poolsz = 256*1024; // 最大記憶體大小 (程式碼/資料/堆疊/符號表)
+  if (!(code = malloc(poolsz))) { printf("could not malloc(%d) text area\n", poolsz); return -1; } // 程式段
+  if (!(data = malloc(poolsz))) { printf("could not malloc(%d) data area\n", poolsz); return -1; } // 資料段
+  if (!(stack = malloc(poolsz))) { printf("could not malloc(%d) stack area\n", poolsz); return -1; }  // 堆疊段
+
+  memset(code, 0, poolsz);
+  memset(data, 0, poolsz);
+
+  op = "LEA ,IMM ,ADDR,JMP ,JSR ,BZ  ,BNZ ,ENT ,ADJ ,LEV ,LI  ,LC  ,SI  ,SC  ,PSH ,"
+       "OR  ,XOR ,AND ,EQ  ,NE  ,LT  ,GT  ,LE  ,GE  ,SHL ,SHR ,ADD ,SUB ,MUL ,DIV ,MOD ,"
+       "OPEN,READ,WRIT,CLOS,PRTF,MALC,FREE,MSET,MCMP,EXIT,";
+}
 
 int stepInstr(int *p) {
   // 傳回下一個指令大小：ADJ 之前有一個參數，之後沒有參數。
@@ -78,7 +112,7 @@ int obj_save(char *oFile, int *entry, int *code, int codeLen, char *data, int da
 }
 
 int obj_load(int fd) {
-  int *codex, *entry, len;
+  int *codex, len; // *entry, 
   char *datax;
   // 載入目的檔
   read(fd, &entry, sizeof(int));
@@ -93,5 +127,5 @@ int obj_load(int fd) {
   }
   len = read(fd, data, dataLen);
   obj_relocate(code, codeLen, codex, datax, code, data);
-  pc = code + (entry-codex);
+  entry = code + (entry-codex);
 }

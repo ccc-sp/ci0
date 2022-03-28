@@ -1,4 +1,4 @@
-#include "common.h"
+// #include "obj.h"
 
 int run(int *pc, int *bp, int *sp) {
   int a, cycle; // a: 累積器, cycle: 執行指令數
@@ -62,6 +62,7 @@ int run(int *pc, int *bp, int *sp) {
 
 int vm(int argc, char **argv) {
   int *t;
+  int *bp, *sp;
   // 虛擬機: setup stack
   bp = sp = (int *)((int)stack + poolsz);
   *--sp = EXIT;     // call exit if main returns
@@ -69,5 +70,5 @@ int vm(int argc, char **argv) {
   *--sp = argc;     // 把 argc,argv 放入堆疊，這樣 main(argc,argv) 才能取得到
   *--sp = (int)argv; 
   *--sp = (int)t;   // 推入返回點，於是最後 RET 時會跳回 t=sp 指定的位址，接著呼叫 EXIT 離開。
-  return run(pc, bp, sp);
+  return run(entry, bp, sp);
 }

@@ -1,4 +1,4 @@
-./cc ../test/$1.c
-./cc ../test/$1.c -o ../test/$1.o
-./jit ../test/$1.o
-
+./run.sh hello
+./run.sh sum
+./run.sh fib
+./cc cc.i ../test/fib.c

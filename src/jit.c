@@ -1,6 +1,5 @@
 // 修改來源 -- https://github.com/EarlGray/c4
 // 指令說明 -- https://github.com/EarlGray/c4/blob/master/JIT.md
-#include "common.c"
 #include "obj.c"
 #include <sys/mman.h>
 #include <dlfcn.h>
@@ -119,7 +118,7 @@ int jit_build() {
 
 int jit_run(int argc, char *argv[]) {
   // run jitted code
-  jitmain = (void *) jitmap[ pc - code ];
+  jitmain = (void *) jitmap[ entry - code ];
   return jitmain(argv, argc); // c4 vm pushes first argument first, unlike cdecl
 }
 

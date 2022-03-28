@@ -5,11 +5,11 @@ OBJS = cc jit
 all: $(OBJS)
 
 cc: cc.c
-	$(CC) -E -D__E__ $^ -o cc.i
+	$(CC) -E -DNO_INCLUDE $^ -o cc.i
 	$(CC) $(CFLAGS) $^ -o cc
 
 jit: jit.c
 	$(CC) $(CFLAGS) $^ -o jit -ldl
 
 clean:
-	rm -f $(OBJS)
+	rm -f $(OBJS) cc.i

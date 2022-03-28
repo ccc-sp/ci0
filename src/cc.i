@@ -4,30 +4,25 @@
 # 1 "/usr/include/stdc-predef.h" 1 3 4
 # 1 "<command-line>" 2
 # 1 "cc.c"
-# 1 "common.c" 1
-# 1 "common.h" 1
-       
-# 11 "common.h"
-int *code, *stack, poolsz;
-char *data, *op;
-int *pc, *bp, *sp;
+# 1 "obj.c" 1
+# 9 "obj.c"
+int *code,
+    *stack,
+    *entry,
+    codeLen,
+    dataLen,
+    poolsz;
 int src,
     debug;
+char *data,
+     *op;
 
 
 enum { LEA ,IMM ,ADDR,JMP ,JSR ,BZ ,BNZ ,ENT ,ADJ ,LEV ,LI ,LC ,SI ,SC ,PSH ,
        OR ,XOR ,AND ,EQ ,NE ,LT ,GT ,LE ,GE ,SHL ,SHR ,ADD ,SUB ,MUL ,DIV ,MOD ,
        OPEN,READ,WRIT,CLOS,PRTF,MALC,FREE,MSET,MCMP,EXIT };
-# 2 "common.c" 2
 
-int *code,
-    *sym,
-    poolsz;
-char *data, *op;
-int src,
-    debug;
-
-void init() {
+int init() {
   poolsz = 256*1024;
   if (!(code = malloc(poolsz))) { printf("could not malloc(%d) text area\n", poolsz); return -1; }
   if (!(data = malloc(poolsz))) { printf("could not malloc(%d) data area\n", poolsz); return -1; }
@@ -40,11 +35,6 @@ void init() {
        "OR  ,XOR ,AND ,EQ  ,NE  ,LT  ,GT  ,LE  ,GE  ,SHL ,SHR ,ADD ,SUB ,MUL ,DIV ,MOD ,"
        "OPEN,READ,WRIT,CLOS,PRTF,MALC,FREE,MSET,MCMP,EXIT,";
 }
-# 2 "cc.c" 2
-# 1 "obj.c" 1
-
-
-int codeLen, dataLen;
 
 int stepInstr(int *p) {
 
@@ -122,7 +112,7 @@ int obj_save(char *oFile, int *entry, int *code, int codeLen, char *data, int da
 }
 
 int obj_load(int fd) {
-  int *codex, *entry, len;
+  int *codex, len;
   char *datax;
 
   read(fd, &entry, sizeof(int));
@@ -137,9 +127,9 @@ int obj_load(int fd) {
   }
   len = read(fd, data, dataLen);
   obj_relocate(code, codeLen, codex, datax, code, data);
-  pc = code + (entry-codex);
+  entry = code + (entry-codex);
 }
-# 3 "cc.c" 2
+# 2 "cc.c" 2
 # 1 "vm.c" 1
 
 
@@ -205,6 +195,7 @@ int run(int *pc, int *bp, int *sp) {
 
 int vm(int argc, char **argv) {
   int *t;
+  int *bp, *sp;
 
   bp = sp = (int *)((int)stack + poolsz);
   *--sp = EXIT;
@@ -212,22 +203,18 @@ int vm(int argc, char **argv) {
   *--sp = argc;
   *--sp = (int)argv;
   *--sp = (int)t;
-  return run(pc, bp, sp);
+  return run(entry, bp, sp);
 }
-# 4 "cc.c" 2
-
-char *source, *p, *lp,
-     *datap,
-     *op;
-
-int *e, *le,
-    *id,
-    *sym, *idmain,
+# 3 "cc.c" 2
+# 1 "lex.c" 1
+char *source, *p, *lp;
+int *id,
     tk,
     ival,
-    ty,
-    loc,
     line;
+char *datap;
+int *e, *le;
+int *sym;
 
 
 enum {
@@ -235,9 +222,6 @@ enum {
   Char, Else, Enum, If, Int, Return, Sizeof, While,
   Assign, Cond, Lor, Lan, Or, Xor, And, Eq, Ne, Lt, Gt, Le, Ge, Shl, Shr, Add, Sub, Mul, Div, Mod, Inc, Dec, Brak
 };
-
-
-enum { CHAR, INT, PTR };
 
 
 
@@ -325,6 +309,14 @@ void next() {
     else if (tk == '~' || tk == ';' || tk == '{' || tk == '}' || tk == '(' || tk == ')' || tk == ']' || tk == ',' || tk == ':') return;
   }
 }
+# 4 "cc.c" 2
+
+int *idmain,
+    ty,
+    loc;
+
+
+enum { CHAR, INT, PTR };
 
 void expr(int lev) {
   int t, *d;
@@ -671,12 +663,12 @@ int main(int argc, char **argv) {
     return -1;
   }
   init();
-  le = e = code; datap = data; sp = stack;
+  le = e = code; datap = data;
   if (!(sym = malloc(poolsz))) { printf("could not malloc(%d) symbol area\n", poolsz); return -1; }
   memset(sym, 0, poolsz);
   if (o_dump) {
     obj_load(fd);
-    obj_dump(pc, code, codeLen, data, dataLen);
+    obj_dump(entry, code, codeLen, data, dataLen);
     return 0;
   }
   if (o_run) {
@@ -685,10 +677,10 @@ int main(int argc, char **argv) {
     return 0;
   }
   if (compile(fd)==-1) return -1;
-  if (!(pc = (int *)idmain[Val])) { printf("main() not defined\n"); return -1; }
+  if (!(entry = (int *)idmain[Val])) { printf("main() not defined\n"); return -1; }
   if (src) return 0;
   if (o_save) {
-    obj_save(oFile, pc, code, e-code+1, data, datap-data);
+    obj_save(oFile, entry, code, e-code+1, data, datap-data);
     printf("Compile %s success!\nOutput: %s\n", iFile, oFile);
     return 0;
   }
