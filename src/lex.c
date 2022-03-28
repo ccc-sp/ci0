@@ -1,16 +1,20 @@
-char *source, *p, *lp; // current position in source code (p: 目前原始碼指標, lp: 上一行原始碼指標)
+char *source, *p, *lp, *token; // current position in source code (p: 目前原始碼指標, lp: 上一行原始碼指標)
 int *id,      // currently parsed identifier (id: 目前的 id)
     tk,       // current token (目前 token)
     ival,     // current token value (目前的 token 值)
     line;     // current line number (目前行號)
 char *datap; // data/bss pointer (資料段機器碼指標)
 int *e, *le; // current position in emitted code (e: 目前機器碼指標, le: 上一行機器碼指標)
-int *sym;
 
 // tokens and classes (operators last and in precedence order) (按優先權順序排列)
-enum { // token : 0-127 直接用該字母表達， 128 以後用代號。
+// enum { // token : 0-127 直接用該字母表達， 128 以後用代號。
+//   Num = 128, Fun, Sys, Glo, Loc, Id,
+//   Char, Else, Enum, If, Int, Return, Sizeof, While,
+//   Assign, Cond, Lor, Lan, Or, Xor, And, Eq, Ne, Lt, Gt, Le, Ge, Shl, Shr, Add, Sub, Mul, Div, Mod, Inc, Dec, Brak
+// };
+
+enum { // token : 0-127 直接用該字母表達， 128 以後用代號。 256 以後是 keyword
   Num = 128, Fun, Sys, Glo, Loc, Id,
-  Char, Else, Enum, If, Int, Return, Sizeof, While,
   Assign, Cond, Lor, Lan, Or, Xor, And, Eq, Ne, Lt, Gt, Le, Ge, Shl, Shr, Add, Sub, Mul, Div, Mod, Inc, Dec, Brak
 };
 
@@ -18,10 +22,14 @@ enum { // token : 0-127 直接用該字母表達， 128 以後用代號。
 // identifier offsets (since we can't create an ident struct)
 enum { Tk, Hash, Name, Class, Type, Val, HClass, HType, HVal, Idsz }; // HClass, HType, HVal 是暫存的備份 ???
 
+// types (支援型態，只有 int, char, pointer)
+enum { CHAR, INT, PTR };
+
 void next() {
   char *pp;
   // 詞彙解析 lexer
   while (tk = *p) {
+    token = p; // 紀錄 token 起始點
     ++p;
     if (tk == '\n') { // 換行
       if (src) {
@@ -38,7 +46,7 @@ void next() {
       while (*p != 0 && *p != '\n') ++p;
     }
     else if ((tk >= 'a' && tk <= 'z') || (tk >= 'A' && tk <= 'Z') || tk == '_') { // 取得變數名稱
-      pp = p - 1;
+      token = pp = p - 1;
       while ((*p >= 'a' && *p <= 'z') || (*p >= 'A' && *p <= 'Z') || (*p >= '0' && *p <= '9') || *p == '_')
         tk = tk * 147 + *p++;  // 計算雜湊值
       tk = (tk << 6) + (p - pp); // 符號表的雜湊位址 ??
@@ -98,5 +106,32 @@ void next() {
     else if (tk == '[') { tk = Brak; return; }
     else if (tk == '?') { tk = Cond; return; }
     else if (tk == '~' || tk == ';' || tk == '{' || tk == '}' || tk == '(' || tk == ')' || tk == ']' || tk == ',' || tk == ':') return;
+  }
+}
+
+int skip(int t) {
+  if (tk == t) next(); else { printf("%d: %c expected\n", line); exit(-1); }
+}
+
+void lex_init(int fd) {
+  int i, *t;
+  // 編譯器
+  p = "open read write close printf malloc free memset memcmp exit";
+  i = OPEN; while (i <= EXIT) { next(); id[Class] = Sys; id[Type] = INT; id[Val] = i++; } // add library to symbol table
+
+  if (!(source = malloc(poolsz))) { printf("could not malloc(%d) source area\n", poolsz); return -1; }
+  if ((i = read(fd, source, poolsz-1)) <= 0) { printf("read() returned %d\n", i); return -1; }
+  source[i] = 0; // 設定程式 source 字串結束符號 \0
+}
+
+int lex() {
+  int bt, i;
+  // 編譯整個程式 Program
+  // src = 1;
+  line = 1;
+  next();
+  while (tk) {
+      printf("%04d:%.*s\n", tk, p-token, token); // 印出該行
+      next();
   }
 }

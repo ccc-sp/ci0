@@ -1,6 +1,6 @@
 // #include "obj.h"
 
-int run(int *pc, int *bp, int *sp) {
+int vm_run(int *pc, int *bp, int *sp) {
   int a, cycle; // a: 累積器, cycle: 執行指令數
   int i, *t;    // temps
   // 虛擬機 => pc: 程式計數器, sp: 堆疊暫存器, bp: 框架暫存器
@@ -70,5 +70,5 @@ int vm(int argc, char **argv) {
   *--sp = argc;     // 把 argc,argv 放入堆疊，這樣 main(argc,argv) 才能取得到
   *--sp = (int)argv; 
   *--sp = (int)t;   // 推入返回點，於是最後 RET 時會跳回 t=sp 指定的位址，接著呼叫 EXIT 離開。
-  return run(entry, bp, sp);
+  return vm_run(entry, bp, sp);
 }

@@ -1,8 +1,11 @@
 CC = gcc
 CFLAGS = -w -g -m32
-OBJS = cc jit
+OBJS = cc jit jc
 
 all: $(OBJS)
+
+jc: jc.c
+	$(CC) $(CFLAGS) $^ -o jc
 
 cc: cc.c
 	$(CC) -E -DNO_INCLUDE $^ -o cc.i

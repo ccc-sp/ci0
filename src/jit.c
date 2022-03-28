@@ -27,6 +27,7 @@ int jit_build() {
   cp = code + 1; je = jitmem; // line = 0;
   while (cp < code+codeLen) {
     i = *cp;
+    /*
     if (src) {
         // while (line < srcmap[cp - code]) {
         //     line++; printf("% 4d | %.*s", line, linemap[line + 1] - linemap[line], linemap[line]);
@@ -34,6 +35,7 @@ int jit_build() {
         printf("0x%05x (%p):\t%8.4s", cp - code, je, &op[i * 5]);
         if (i <= ADJ) printf(" 0x%x\n", *(cp + 1)); else printf("\n");
     }
+    */
     jitmap[cp - code] = je;  // for later relocation of JMP/JSR/BZ/BNZ
     cp++;
     if (i == LEA) {
@@ -129,10 +131,8 @@ int main(int argc, char *argv[]) {
   iFile = argv[1];
   fd = open(iFile, 0100000);
   assert(fd != -1);
-  init();
+  obj_init();
   obj_load(fd);
-  // obj_dump(pc, code, codeLen, data, dataLen);
-  // src = 1;
   jit_build();
   jit_run(argc, argv);
 }

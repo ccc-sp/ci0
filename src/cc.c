@@ -1,13 +1,9 @@
+#include "common.c"
 #include "obj.c"
 #include "vm.c"
 #include "lex.c"
 
-int *idmain,
-    ty,       // current expression type (目前的運算式型態)
-    loc;      // local variable offset (區域變數的位移)
-
-// types (支援型態，只有 int, char, pointer)
-enum { CHAR, INT, PTR };
+enum { Char=256, Else, Enum, If, Int, Return, Sizeof, While };
 
 void expr(int lev) {
   int t, *d;
@@ -164,9 +160,9 @@ void stmt() {
   // 陳述 statement
   if (tk == If) { // if 語句
     next();
-    if (tk == '(') next(); else { printf("%d: open paren expected\n", line); exit(-1); }
+    skip('('); // if (tk == '(') next(); else { printf("%d: open paren expected\n", line); exit(-1); }
     expr(Assign);
-    if (tk == ')') next(); else { printf("%d: close paren expected\n", line); exit(-1); }
+    skip(')'); // if (tk == ')') next(); else { printf("%d: close paren expected\n", line); exit(-1); }
     *++e = BZ; b = ++e;
     stmt();
     if (tk == Else) { // else 語句
@@ -179,9 +175,9 @@ void stmt() {
   else if (tk == While) { // while 語句
     next();
     a = e + 1;
-    if (tk == '(') next(); else { printf("%d: open paren expected\n", line); exit(-1); }
+    skip('('); // if (tk == '(') next(); else { printf("%d: open paren expected\n", line); exit(-1); }
     expr(Assign);
-    if (tk == ')') next(); else { printf("%d: close paren expected\n", line); exit(-1); }
+    skip(')'); // if (tk == ')') next(); else { printf("%d: close paren expected\n", line); exit(-1); }
     *++e = BZ; b = ++e;
     stmt();
     *++e = JMP; *++e = (int)a;
@@ -191,7 +187,7 @@ void stmt() {
     next();
     if (tk != ';') expr(Assign);
     *++e = LEV;
-    if (tk == ';') next(); else { printf("%d: semicolon expected\n", line); exit(-1); }
+    skip(';'); // if (tk == ';') next(); else { printf("%d: semicolon expected\n", line); exit(-1); }
   }
   else if (tk == '{') { // 區塊 {...}
     next();
@@ -203,7 +199,7 @@ void stmt() {
   }
   else { // 指定 assign
     expr(Assign);
-    if (tk == ';') next(); else { printf("%d: semicolon expected\n", line); exit(-1); }
+    skip(';'); // if (tk == ';') next(); else { printf("%d: semicolon expected\n", line); exit(-1); }
   }
 }
 
@@ -309,72 +305,22 @@ int prog() {
 }
 
 int compile(int fd) {
-  int i, *t;
-  // 編譯器
-  p = "char else enum if int return sizeof while "
-      "open read write close printf malloc free memset memcmp exit void main";
+  int i;
+
+  lex_init(fd);
+
+  p = "char else enum if int return sizeof while ";
   i = Char; while (i <= While) { next(); id[Tk] = i++; } // add keywords to symbol table
-  i = OPEN; while (i <= EXIT) { next(); id[Class] = Sys; id[Type] = INT; id[Val] = i++; } // add library to symbol table
+
+  p = "void main";
   next(); id[Tk] = Char; // handle void type
   next(); idmain = id; // keep track of main
 
-  if (!(source = lp = p = malloc(poolsz))) { printf("could not malloc(%d) source area\n", poolsz); return -1; }
-  if ((i = read(fd, source, poolsz-1)) <= 0) { printf("read() returned %d\n", i); return -1; }
-  p[i] = 0; // 設定程式 p 字串結束符號 \0
+  lp = p = source;
 
-  return prog();
-}
+  if (prog()==-1) return -1;
 
-int main(int argc, char **argv) {
-  char *iFile, *oFile, *narg;
-  int fd, o_run, o_save, o_dump;
-  src = 0; 
-  debug = 0;
-  o_run = 0;  // 執行目的檔
-  o_save = 0; // 反組譯目的檔
-  o_dump = 0; // 傾印目的檔
-
-  // 主程式
-  --argc; ++argv; // 略過程式名稱 ./c6
-  if (argc > 0 && **argv == '-' && (*argv)[1] == 's') { src = 1; --argc; ++argv; }
-  if (argc > 0 && **argv == '-' && (*argv)[1] == 'd') { debug = 1; --argc; ++argv; }
-  if (argc > 0 && **argv == '-' && (*argv)[1] == 'r') { o_run = 1; --argc; ++argv; }
-  if (argc > 0 && **argv == '-' && (*argv)[1] == 'u') { o_dump = 1; --argc; ++argv; }
-  if (argc < 1) { printf("usage: c6 [-s] [-d] [-r] [-u] in_file [-o] out_file...\n"); return -1; }
-  iFile = *argv;
-  if (argc > 1) {
-    narg = *(argv+1);
-    if (*narg == '-' && narg[1] == 'o') {
-      o_save = 1;
-      oFile = *(argv+2);
-    }
-  }
-  if ((fd = open(iFile, 0100000)) < 0) { // 0100000 代表以 BINARY mode 開啟 (Windows 中預設為 TEXT mode)
-    printf("could not open(%s)\n", iFile);
-    return -1;
-  }
-  init();
-  le = e = code; datap = data;
-  if (!(sym = malloc(poolsz))) { printf("could not malloc(%d) symbol area\n", poolsz); return -1; } // 符號段
-  memset(sym,  0, poolsz);
-  if (o_dump) { // -u: 印出目的檔
-    obj_load(fd);
-    obj_dump(entry, code, codeLen, data, dataLen);
-    return 0;
-  }
-  if (o_run) { // -r: 執行目的檔
-    obj_load(fd);
-    vm(argc, argv);
-    return 0;
-  }
-  if (compile(fd)==-1) return -1; // 編譯
   if (!(entry = (int *)idmain[Val])) { printf("main() not defined\n"); return -1; }
-  if (src) return 0; // 編譯並列印，不執行
-  if (o_save) { // -o 輸出目的檔，但不執行
-    obj_save(oFile, entry, code, e-code+1, data, datap-data);
-    printf("Compile %s success!\nOutput: %s\n", iFile, oFile);
-    return 0;
-  }
-  close(fd);
-  vm(argc, argv); // 用虛擬機執行編譯出來的碼
 }
+
+#include "main.c"

@@ -4,16 +4,67 @@
 # 1 "/usr/include/stdc-predef.h" 1 3 4
 # 1 "<command-line>" 2
 # 1 "cc.c"
+# 1 "common.c" 1
+# 9 "common.c"
+int fd;
+char *iFile, *oFile;
+int src,
+    debug,
+    run,
+    o_run,
+    o_save,
+    o_dump;
+int argc0;
+char **argv0;
+
+int *idmain,
+    ty,
+    loc;
+
+int arg_handle(int argc, char **argv) {
+  char *narg;
+
+  src = 0;
+  debug = 0;
+  run = 1;
+  o_run = 0;
+  o_save = 0;
+  o_dump = 0;
+
+
+  --argc; ++argv;
+  if (argc > 0 && **argv == '-' && (*argv)[1] == 's') { src = 1; --argc; ++argv; }
+  if (argc > 0 && **argv == '-' && (*argv)[1] == 'd') { debug = 1; --argc; ++argv; }
+  if (argc > 0 && **argv == '-' && (*argv)[1] == 'r') { o_run = 1; --argc; ++argv; }
+  if (argc > 0 && **argv == '-' && (*argv)[1] == 'n') { run = 0; --argc; ++argv; }
+  if (argc > 0 && **argv == '-' && (*argv)[1] == 'u') { o_dump = 1; --argc; ++argv; }
+  if (argc < 1) { printf("usage: c6 [-s] [-d] [-r] [-u] in_file [-o] out_file...\n"); return -1; }
+  iFile = *argv;
+  if (argc > 1) {
+    narg = *(argv+1);
+    if (*narg == '-' && narg[1] == 'o') {
+      o_save = 1;
+      oFile = *(argv+2);
+    }
+  }
+  if ((fd = open(iFile, 0100000)) < 0) {
+    printf("could not open(%s)\n", iFile);
+    return -1;
+  }
+
+  argc0 = argc;
+  argv0 = argv;
+}
+# 2 "cc.c" 2
 # 1 "obj.c" 1
-# 9 "obj.c"
 int *code,
     *stack,
+    *sym,
     *entry,
     codeLen,
     dataLen,
     poolsz;
-int src,
-    debug;
+
 char *data,
      *op;
 
@@ -22,18 +73,21 @@ enum { LEA ,IMM ,ADDR,JMP ,JSR ,BZ ,BNZ ,ENT ,ADJ ,LEV ,LI ,LC ,SI ,SC ,PSH ,
        OR ,XOR ,AND ,EQ ,NE ,LT ,GT ,LE ,GE ,SHL ,SHR ,ADD ,SUB ,MUL ,DIV ,MOD ,
        OPEN,READ,WRIT,CLOS,PRTF,MALC,FREE,MSET,MCMP,EXIT };
 
-int init() {
+int obj_init() {
   poolsz = 256*1024;
   if (!(code = malloc(poolsz))) { printf("could not malloc(%d) text area\n", poolsz); return -1; }
   if (!(data = malloc(poolsz))) { printf("could not malloc(%d) data area\n", poolsz); return -1; }
   if (!(stack = malloc(poolsz))) { printf("could not malloc(%d) stack area\n", poolsz); return -1; }
+  if (!(sym = malloc(poolsz))) { printf("could not malloc(%d) symbol area\n", poolsz); return -1; }
 
   memset(code, 0, poolsz);
   memset(data, 0, poolsz);
+  memset(sym, 0, poolsz);
 
   op = "LEA ,IMM ,ADDR,JMP ,JSR ,BZ  ,BNZ ,ENT ,ADJ ,LEV ,LI  ,LC  ,SI  ,SC  ,PSH ,"
        "OR  ,XOR ,AND ,EQ  ,NE  ,LT  ,GT  ,LE  ,GE  ,SHL ,SHR ,ADD ,SUB ,MUL ,DIV ,MOD ,"
        "OPEN,READ,WRIT,CLOS,PRTF,MALC,FREE,MSET,MCMP,EXIT,";
+
 }
 
 int stepInstr(int *p) {
@@ -129,11 +183,11 @@ int obj_load(int fd) {
   obj_relocate(code, codeLen, codex, datax, code, data);
   entry = code + (entry-codex);
 }
-# 2 "cc.c" 2
+# 3 "cc.c" 2
 # 1 "vm.c" 1
 
 
-int run(int *pc, int *bp, int *sp) {
+int vm_run(int *pc, int *bp, int *sp) {
   int a, cycle;
   int i, *t;
 
@@ -203,23 +257,20 @@ int vm(int argc, char **argv) {
   *--sp = argc;
   *--sp = (int)argv;
   *--sp = (int)t;
-  return run(entry, bp, sp);
+  return vm_run(entry, bp, sp);
 }
-# 3 "cc.c" 2
+# 4 "cc.c" 2
 # 1 "lex.c" 1
-char *source, *p, *lp;
+char *source, *p, *lp, *token;
 int *id,
     tk,
     ival,
     line;
 char *datap;
 int *e, *le;
-int *sym;
-
-
+# 16 "lex.c"
 enum {
   Num = 128, Fun, Sys, Glo, Loc, Id,
-  Char, Else, Enum, If, Int, Return, Sizeof, While,
   Assign, Cond, Lor, Lan, Or, Xor, And, Eq, Ne, Lt, Gt, Le, Ge, Shl, Shr, Add, Sub, Mul, Div, Mod, Inc, Dec, Brak
 };
 
@@ -227,10 +278,14 @@ enum {
 
 enum { Tk, Hash, Name, Class, Type, Val, HClass, HType, HVal, Idsz };
 
+
+enum { CHAR, INT, PTR };
+
 void next() {
   char *pp;
 
   while (tk = *p) {
+    token = p;
     ++p;
     if (tk == '\n') {
       if (src) {
@@ -247,7 +302,7 @@ void next() {
       while (*p != 0 && *p != '\n') ++p;
     }
     else if ((tk >= 'a' && tk <= 'z') || (tk >= 'A' && tk <= 'Z') || tk == '_') {
-      pp = p - 1;
+      token = pp = p - 1;
       while ((*p >= 'a' && *p <= 'z') || (*p >= 'A' && *p <= 'Z') || (*p >= '0' && *p <= '9') || *p == '_')
         tk = tk * 147 + *p++;
       tk = (tk << 6) + (p - pp);
@@ -309,14 +364,36 @@ void next() {
     else if (tk == '~' || tk == ';' || tk == '{' || tk == '}' || tk == '(' || tk == ')' || tk == ']' || tk == ',' || tk == ':') return;
   }
 }
-# 4 "cc.c" 2
 
-int *idmain,
-    ty,
-    loc;
+int skip(int t) {
+  if (tk == t) next(); else { printf("%d: %c expected\n", line); exit(-1); }
+}
+
+void lex_init(int fd) {
+  int i, *t;
+
+  p = "open read write close printf malloc free memset memcmp exit";
+  i = OPEN; while (i <= EXIT) { next(); id[Class] = Sys; id[Type] = INT; id[Val] = i++; }
+
+  if (!(source = malloc(poolsz))) { printf("could not malloc(%d) source area\n", poolsz); return -1; }
+  if ((i = read(fd, source, poolsz-1)) <= 0) { printf("read() returned %d\n", i); return -1; }
+  source[i] = 0;
+}
+
+int lex() {
+  int bt, i;
 
 
-enum { CHAR, INT, PTR };
+  line = 1;
+  next();
+  while (tk) {
+      printf("%04d:%.*s\n", tk, p-token, token);
+      next();
+  }
+}
+# 5 "cc.c" 2
+
+enum { Char=256, Else, Enum, If, Int, Return, Sizeof, While };
 
 void expr(int lev) {
   int t, *d;
@@ -473,9 +550,9 @@ void stmt() {
 
   if (tk == If) {
     next();
-    if (tk == '(') next(); else { printf("%d: open paren expected\n", line); exit(-1); }
+    skip('(');
     expr(Assign);
-    if (tk == ')') next(); else { printf("%d: close paren expected\n", line); exit(-1); }
+    skip(')');
     *++e = BZ; b = ++e;
     stmt();
     if (tk == Else) {
@@ -488,9 +565,9 @@ void stmt() {
   else if (tk == While) {
     next();
     a = e + 1;
-    if (tk == '(') next(); else { printf("%d: open paren expected\n", line); exit(-1); }
+    skip('(');
     expr(Assign);
-    if (tk == ')') next(); else { printf("%d: close paren expected\n", line); exit(-1); }
+    skip(')');
     *++e = BZ; b = ++e;
     stmt();
     *++e = JMP; *++e = (int)a;
@@ -500,7 +577,7 @@ void stmt() {
     next();
     if (tk != ';') expr(Assign);
     *++e = LEV;
-    if (tk == ';') next(); else { printf("%d: semicolon expected\n", line); exit(-1); }
+    skip(';');
   }
   else if (tk == '{') {
     next();
@@ -512,7 +589,7 @@ void stmt() {
   }
   else {
     expr(Assign);
-    if (tk == ';') next(); else { printf("%d: semicolon expected\n", line); exit(-1); }
+    skip(';');
   }
 }
 
@@ -618,54 +695,29 @@ int prog() {
 }
 
 int compile(int fd) {
-  int i, *t;
+  int i;
 
-  p = "char else enum if int return sizeof while "
-      "open read write close printf malloc free memset memcmp exit void main";
+  lex_init(fd);
+
+  p = "char else enum if int return sizeof while ";
   i = Char; while (i <= While) { next(); id[Tk] = i++; }
-  i = OPEN; while (i <= EXIT) { next(); id[Class] = Sys; id[Type] = INT; id[Val] = i++; }
+
+  p = "void main";
   next(); id[Tk] = Char;
   next(); idmain = id;
 
-  if (!(source = lp = p = malloc(poolsz))) { printf("could not malloc(%d) source area\n", poolsz); return -1; }
-  if ((i = read(fd, source, poolsz-1)) <= 0) { printf("read() returned %d\n", i); return -1; }
-  p[i] = 0;
+  lp = p = source;
 
-  return prog();
+  if (prog()==-1) return -1;
+
+  if (!(entry = (int *)idmain[Val])) { printf("main() not defined\n"); return -1; }
 }
 
+# 1 "main.c" 1
 int main(int argc, char **argv) {
-  char *iFile, *oFile, *narg;
-  int fd, o_run, o_save, o_dump;
-  src = 0;
-  debug = 0;
-  o_run = 0;
-  o_save = 0;
-  o_dump = 0;
-
-
-  --argc; ++argv;
-  if (argc > 0 && **argv == '-' && (*argv)[1] == 's') { src = 1; --argc; ++argv; }
-  if (argc > 0 && **argv == '-' && (*argv)[1] == 'd') { debug = 1; --argc; ++argv; }
-  if (argc > 0 && **argv == '-' && (*argv)[1] == 'r') { o_run = 1; --argc; ++argv; }
-  if (argc > 0 && **argv == '-' && (*argv)[1] == 'u') { o_dump = 1; --argc; ++argv; }
-  if (argc < 1) { printf("usage: c6 [-s] [-d] [-r] [-u] in_file [-o] out_file...\n"); return -1; }
-  iFile = *argv;
-  if (argc > 1) {
-    narg = *(argv+1);
-    if (*narg == '-' && narg[1] == 'o') {
-      o_save = 1;
-      oFile = *(argv+2);
-    }
-  }
-  if ((fd = open(iFile, 0100000)) < 0) {
-    printf("could not open(%s)\n", iFile);
-    return -1;
-  }
-  init();
+  arg_handle(argc, argv);
+  obj_init();
   le = e = code; datap = data;
-  if (!(sym = malloc(poolsz))) { printf("could not malloc(%d) symbol area\n", poolsz); return -1; }
-  memset(sym, 0, poolsz);
   if (o_dump) {
     obj_load(fd);
     obj_dump(entry, code, codeLen, data, dataLen);
@@ -676,8 +728,9 @@ int main(int argc, char **argv) {
     vm(argc, argv);
     return 0;
   }
+
   if (compile(fd)==-1) return -1;
-  if (!(entry = (int *)idmain[Val])) { printf("main() not defined\n"); return -1; }
+
   if (src) return 0;
   if (o_save) {
     obj_save(oFile, entry, code, e-code+1, data, datap-data);
@@ -685,5 +738,8 @@ int main(int argc, char **argv) {
     return 0;
   }
   close(fd);
-  vm(argc, argv);
+  if (run) {
+    vm(argc0, argv0);
+  }
 }
+# 327 "cc.c" 2
